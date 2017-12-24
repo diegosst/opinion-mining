@@ -16,4 +16,4 @@ for transcript, text in pw.items():
             print('#####################')
             print('Start: ' + value['@start'])
             print('Duration: ' + value['@dur'])
-            print('Text: ' + value['#text'].encode("utf-8"))
+            print('Text: ' + value['#text'])
