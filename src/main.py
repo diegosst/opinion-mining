@@ -12,5 +12,7 @@ def main():
 
     sentences = Caption.get_sentences(video_code, language)
 
+    TextExtraction.generate_polarity_for_sentences(sentences, video_code)
+
 
 main()
