@@ -1,11 +1,9 @@
-import pytube
+import youtubeopinion.extraction.audio as AudioExtraction
 import youtubeopinion.extraction.text as TextExtraction
+import youtubeopinion.extraction.video as VideoExtraction
 import youtubeopinion.transcription.caption as Caption
 
 def main():
-
-    # Downloading video direct from youtube.
-    # pytube.YouTube('http://youtube.com/watch?v=ELSPFbh67zw').streams.first().download()
 
     video_code = "ELSPFbh67zw"
     language = "en"
@@ -13,6 +11,8 @@ def main():
     sentences = Caption.get_sentences(video_code, language)
 
     TextExtraction.generate_polarity_for_sentences(sentences, video_code)
+    VideoExtraction.get_video_from_youtube(video_code)
+    AudioExtraction.get_audio_from_video(video_code)
 
 
 main()

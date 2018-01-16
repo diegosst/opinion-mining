@@ -17,7 +17,7 @@ def get_sentence_polarity(text):
 
 def generate_polarity_for_sentences(sentences, video_code):
 
-    directory = '../../Data/Polarities/'
+    directory = '../../Data/Videos/' + str(video_code) + '/Polarities/'
     complement = '_sentences_polarity.txt'
 
     file = Path(directory + str(video_code) + complement)
@@ -30,12 +30,18 @@ def generate_polarity_for_sentences(sentences, video_code):
 
     file = open(directory + str(video_code) + complement, 'w')
 
+    polarity_separator = str('|')
+    duration_separator = str('-')
+
     for code, sentence in sentences.items():
 
         start = sentence['start']
+        end = sentence['end']
         duration = sentence['duration']
         text = sentence['text']
 
-        file.write(start + '-' + str(round(float(start) + float(duration), 2)) + ':' + get_sentence_polarity(text) + '\n')
+        content = (start + duration_separator + end + polarity_separator + get_sentence_polarity(text) + '\n')
+
+        file.write(content)
 
     file.close()

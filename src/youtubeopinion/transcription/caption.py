@@ -26,11 +26,13 @@ def get_sentences(code, language):
                 start = value['@start']
                 duration = value['@dur']
                 text = html.unescape(value['#text'])
+                end = str(round(float(start) + float(duration), 2))
 
                 sentence = {
-                    "start": start,
-                    "duration": duration,
-                    "text": text
+                    'start' : start,
+                    'end': end,
+                    'duration' : duration,
+                    'text' : text
                 }
 
                 sentences[index] = sentence
