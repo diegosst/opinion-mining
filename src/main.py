@@ -12,7 +12,7 @@ def main():
 
     TextExtraction.generate_polarity_for_sentences(sentences, video_code)
     VideoExtraction.get_video_from_youtube(video_code)
-    AudioExtraction.get_audio_from_video(video_code)
+    AudioExtraction.generate_audio_features(video_code)
 
 
 main()

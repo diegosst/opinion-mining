@@ -17,6 +17,8 @@ def get_sentence_polarity(text):
 
 def generate_polarity_for_sentences(sentences, video_code):
 
+    print('## GENERATING TEXT POLARITY FILE ##')
+
     directory = '../../Data/Videos/' + str(video_code) + '/Polarities/'
     complement = '_sentences_polarity.txt'
 
@@ -26,6 +28,7 @@ def generate_polarity_for_sentences(sentences, video_code):
         os.makedirs(directory)
 
     if file.is_file():
+        print('## TEXT POLARITY FILE ALREADY GENERATED, SKIPPING THIS STEP. ##')
         return
 
     file = open(directory + str(video_code) + complement, 'w')
@@ -45,3 +48,5 @@ def generate_polarity_for_sentences(sentences, video_code):
         file.write(content)
 
     file.close()
+
+    print('## TEXT POLARITY FILE GENERATED WITH SUCCESS! ##')

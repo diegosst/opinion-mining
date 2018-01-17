@@ -12,6 +12,8 @@ def get_captions(code, language):
 
 def get_sentences(code, language):
 
+    print('## GENERATING SENTENCES DATA ##')
+
     captions = get_captions(code, language)
 
     sentences = {}
@@ -21,7 +23,6 @@ def get_sentences(code, language):
     for transcript, text in captions.items():
         for part, list in text.items():
             for value in list:
-                print('#####################')
 
                 start = value['@start']
                 duration = value['@dur']
@@ -39,9 +40,6 @@ def get_sentences(code, language):
 
                 index += 1
 
-                print('Start: ' + start)
-                print('Duration: ' + duration)
-                print('Text: ' + text)
-
+    print('## SENTENCES DATA GENERATED WITH SUCCESS! ##')
 
     return sentences

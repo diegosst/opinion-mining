@@ -6,6 +6,8 @@ from pathlib import Path
 
 def get_video_from_youtube(video_code):
 
+    print('## DOWNLOADING VIDEO FROM YOUTUBE ##')
+
     video_directory = '../../Data/Videos/' + str(video_code)
     current_directory = os.getcwd()
     file_name = ''
@@ -18,6 +20,7 @@ def get_video_from_youtube(video_code):
         os.makedirs(video_directory)
 
     if file.is_file():
+        print('## VIDEO FILE ALREADY GENERATED, SKIPPING THIS STEP. ##')
         return
 
     os.chdir(video_directory)
@@ -32,3 +35,5 @@ def get_video_from_youtube(video_code):
     os.rename(file_name, video_code + extension)
 
     os.chdir(current_directory)
+
+    print('## VIDEO DOWNLOADED WITH SUCCESS! ##')
