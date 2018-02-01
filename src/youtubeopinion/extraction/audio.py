@@ -1,5 +1,6 @@
 import librosa
 import os
+import numpy
 import imageio
 imageio.plugins.ffmpeg.download()
 import moviepy.editor as MovieEditor
@@ -12,6 +13,10 @@ video_directory = '../../Data/Videos/'
 mp4_extension = '.mp4'
 mp3_extesion = '.mp3'
 wav_extension = '.wav'
+fragment_extension = '-fragment-'
+values_separator = ';'
+feature_separator = '|'
+duration_separator = '-'
 
 def get_audio_from_video(video_code):
 
@@ -43,64 +48,107 @@ def get_audio_from_video(video_code):
     print('## AUDIO FROM VIDEO RETRIEVED WITH SUCCESS! ##')
 
 
-def generate_audio_features(video_code):
+def generate_audio_features(sentences, video_code):
 
     get_audio_from_video(video_code)
+    audio_fragmentation(sentences, video_code)
 
     print('## GENERATING AUDIO FEATURES ##')
 
-    audio_features = {}
+    directory = '../../Data/Videos/' + str(video_code) + '/Extractions/'
+    complement = '_audio_features.txt'
+
+    file = Path(directory + str(video_code) + complement)
+
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
+    if file.is_file():
+        print('## AUDIO FEATURES FILE ALREADY GENERATED, SKIPPING THIS STEP. ##')
+        return
+
+    file = open(directory + str(video_code) + complement, 'w')
+
+    current_directory = os.getcwd()
+
+    os.chdir(video_directory + str(video_code) + '/Fragments/Audio')
+
+    message = ''
+
+    for code, sentence in sentences.items():
+
+        sentence_start = sentence['start']
+        sentence_end = sentence['end']
+
+        start = int(float(sentence['start']) * 1000)
+
+        y, sr = librosa.load(video_code + fragment_extension + str(start) + wav_extension)
+
+        mfcc = librosa.feature.mfcc(y=y, sr=sr)
+        mel_spectrogram = librosa.feature.melspectrogram(y=y, sr=sr)
+        spectral_centroid = librosa.feature.spectral_centroid(y=y, sr=sr)
+        spectral_contrast = librosa.feature.spectral_contrast(y=y, sr=sr)
+        spectral_rolloff = librosa.feature.spectral_rolloff(y=y, sr=sr)
+        poly_features = librosa.feature.poly_features(y=y, sr=sr)
+        tonnetz = librosa.feature.tonnetz(y=y, sr=sr)
+        zero_crossing_rate = librosa.feature.zero_crossing_rate(y=y)
+
+        # [START-END]MFCC(MIN);MFCC(MAX)|MEL_SPEC(MIN);MEL_SPEC(MAX)|...
+
+        message += '[' + sentence_start + duration_separator + sentence_end + ']'
+        message += message_constructor(mfcc, 1)
+        message += message_constructor(mel_spectrogram, 1)
+        message += message_constructor(spectral_centroid, 1)
+        message += message_constructor(spectral_contrast, 1)
+        message += message_constructor(spectral_rolloff, 1)
+        message += message_constructor(poly_features, 1)
+        message += message_constructor(tonnetz, 1)
+        message += message_constructor(zero_crossing_rate, 0)
+
+
+    file.write(message)
+    file.close()
+
+    os.chdir(current_directory)
+
+    print('## AUDIO FEATURES GENERATED WITH SUCCESS! ##')
+
+
+def audio_fragmentation(sentences, video_code):
+
+    fragments_directory = video_directory + str(video_code) + '/Fragments'
+    audio_directory = fragments_directory + '/Audio'
+
+    if not os.path.exists(fragments_directory):
+        os.makedirs(fragments_directory)
+
+    if not os.path.exists(audio_directory):
+        os.makedirs(audio_directory)
+    else:
+        return
 
     current_directory = os.getcwd()
 
     os.chdir(video_directory + str(video_code))
 
-    y, sr = librosa.load(video_code + wav_extension)
+    sound = AudioSegment.from_mp3(video_code + wav_extension)
 
-    mfcc = librosa.feature.mfcc(y=y, sr=sr)
-    mel_spectrogram = librosa.feature.melspectrogram(y=y, sr=sr)
-    spectral_centroid = librosa.feature.spectral_centroid(y=y, sr=sr)
-    spectral_contrast = librosa.feature.spectral_contrast(y=y, sr=sr)
-    spectral_rolloff = librosa.feature.spectral_rolloff(y=y, sr=sr)
-    poly_features = librosa.feature.poly_features(y=y, sr=sr)
-    tonnetz = librosa.feature.tonnetz(y=y, sr=sr)
-    zero_crossing_rate = librosa.feature.zero_crossing_rate(y=y)
+    os.chdir(current_directory)
+    os.chdir(audio_directory)
+
+    for code, sentence in sentences.items():
+
+        start = int(float(sentence['start']) * 1000)
+        end = int(float(sentence['end']) * 1000)
+
+        fragment = sound[start:end]
+
+        fragment.export(video_code + fragment_extension + str(start) + wav_extension, format="wav")
 
     os.chdir(current_directory)
 
-    audio_features = {
-        'mfcc' : mfcc,
-        'mel_spectrogram' : mel_spectrogram,
-        'spectral_centroid' : spectral_centroid,
-        'spectral_contrast' : spectral_contrast,
-        'spectral_rolloff' : spectral_rolloff,
-        'poly_features' : poly_features,
-        'tonnetz' : tonnetz,
-        'zero_crossing_rate' : zero_crossing_rate
-    }
 
-    print('## AUDIO FEATURES GENERATED WITH SUCCESS! ##')
+def message_constructor(value, add_separator):
 
-    return audio_features
-
-# TODO: USE THIS TO GENERATE FRAGMENTED AUDIOS
-# EXAMPLE OF AUDIO FRAGMENTATION
-# files_path = 'a'
-# file_name = 'a'
-#
-# startMin = 9
-# startSec = 50
-#
-# endMin = 13
-# endSec = 30
-#
-# # Time to miliseconds
-# startTime = startMin*60*1000+startSec*1000
-# endTime = endMin*60*1000+endSec*1000
-#
-# # Opening file and extracting segment
-# song = AudioSegment.from_mp3( files_path+file_name+'.mp3' )
-# extract = song[startTime:endTime]
-#
-# # Saving
-# extract.export( file_name+'-extract.mp3', format="mp3")
+    return str(round(float(numpy.amin(value)), 2)) + values_separator + \
+           str(round(float(numpy.amax(value)), 2)) + (feature_separator if bool(add_separator) else '\n')

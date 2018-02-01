@@ -19,7 +19,7 @@ def generate_polarity_for_sentences(sentences, video_code):
 
     print('## GENERATING TEXT POLARITY FILE ##')
 
-    directory = '../../Data/Videos/' + str(video_code) + '/Polarities/'
+    directory = '../../Data/Videos/' + str(video_code) + '/Extractions/'
     complement = '_sentences_polarity.txt'
 
     file = Path(directory + str(video_code) + complement)
