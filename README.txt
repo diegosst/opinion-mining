@@ -64,9 +64,8 @@ pydub
 pyAudioAnalysis
 imageio
 moviepy
-pydub
 librosa
-
+cv2
 
 16. Instale o ffmpeg.
 Link: https://ffmpeg.zeranoe.com/builds/
