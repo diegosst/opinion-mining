@@ -61,7 +61,6 @@ pytube
 xmltodict
 textblob
 pydub
-pyAudioAnalysis
 imageio
 moviepy
 librosa

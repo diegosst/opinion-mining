@@ -1,6 +1,15 @@
 import os
+import nltk
+import string
 from textblob import TextBlob
 from pathlib import Path
+from nltk import word_tokenize
+from nltk.stem.wordnet import WordNetLemmatizer
+from nltk.corpus import stopwords
+nltk.download('punkt')
+nltk.download('averaged_perceptron_tagger')
+nltk.download('stopwords')
+nltk.download('wordnet')
 
 
 def get_sentence_polarity(text):
@@ -36,6 +45,8 @@ def generate_polarity_for_sentences(sentences, video_code):
     polarity_separator = str('|')
     duration_separator = str('-')
 
+    lemmatizer = WordNetLemmatizer()
+
     for code, sentence in sentences.items():
 
         start = sentence['start']
@@ -43,10 +54,24 @@ def generate_polarity_for_sentences(sentences, video_code):
         duration = sentence['duration']
         text = sentence['text']
 
-        content = (start + duration_separator + end + polarity_separator + get_sentence_polarity(text) + '\n')
+        table = str.maketrans('', '', string.punctuation)
+        stop_words = set(stopwords.words('english'))
+
+        words = word_tokenize(text)
+        words = [w.translate(table) for w in words]
+        words = [w for w in words if not w in stop_words]
+        words = [word for word in words if word.isalpha()]
+        words = [nltk.stem.porter.PorterStemmer().stem(word) for word in words]
+        words = [lemmatizer.lemmatize(word) for word in words]
+
+        tags = nltk.pos_tag(words)
+
+        content = (start + duration_separator + end + polarity_separator + str([word for word in [tag for tag in tags]]) + '\n')
 
         file.write(content)
 
     file.close()
 
     print('## TEXT POLARITY FILE GENERATED WITH SUCCESS! ##')
+
+

@@ -2,14 +2,28 @@ import pytube
 import cv2
 import os
 import glob
+import dlib
+import numpy as np
 from pathlib import Path
 from moviepy.tools import subprocess_call
 from moviepy.config import get_setting
 
 
+cascPath = "../../Lib/site-packages/cv2/data/haarcascade_frontalface_default.xml"
+PREDICTOR_PATH = "../../Data/shape_predictor_68_face_landmarks.dat"
+
 video_extension = '.mp4'
 frame_extension = '.jpg'
 fragment_extension = '-fragment-'
+
+JAWLINE_POINTS = list(range(0, 17))
+RIGHT_EYEBROW_POINTS = list(range(17, 22))
+LEFT_EYEBROW_POINTS = list(range(22, 27))
+NOSE_POINTS = list(range(27, 36))
+RIGHT_EYE_POINTS = list(range(36, 42))
+LEFT_EYE_POINTS = list(range(42, 48))
+MOUTH_OUTLINE_POINTS = list(range(48, 61))
+MOUTH_INNER_POINTS = list(range(61, 68))
 
 def get_video_from_youtube(video_code):
 
@@ -52,7 +66,7 @@ def generate_video_features(sentences, video_code):
 
     print('## GENERATING VIDEO FEATURES ##')
 
-
+    feature_extraction(sentences, video_code)
 
     print('## VIDEO FEATURES GENERATED WITH SUCCESS! ##')
 
@@ -161,3 +175,65 @@ def extract_subclip(filename, t1, t2, fps, bv, targetname=None):
            targetname]
 
     subprocess_call(cmd)
+
+
+def feature_extraction(sentences, video_code):
+
+    videos_directory = '../../Data/Videos/' + str(video_code)
+    fragments_directory = videos_directory + '/Fragments'
+    frames_directory = fragments_directory + '/Frames'
+
+    current_directory = os.getcwd()
+
+    faceCascade = cv2.CascadeClassifier(cascPath)
+
+    predictor = dlib.shape_predictor(PREDICTOR_PATH)
+
+    for code, sentence in sentences.items():
+
+        start = int(float(sentence['start']) * 1000)
+        end = int(float(sentence['end']) * 1000)
+
+        os.chdir(frames_directory + '/' + str(start))
+
+        for file in os.listdir():
+
+            # Read the image
+            image = cv2.imread(file)
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+            # Detect faces in the image
+            faces = faceCascade.detectMultiScale(
+                gray,
+                scaleFactor=1.05,
+                minNeighbors=5,
+                minSize=(100, 100),
+                flags=cv2.CASCADE_SCALE_IMAGE
+            )
+
+            print("Found {0} faces!".format(len(faces)))
+
+            # Draw a rectangle around the faces
+            for (x, y, w, h) in faces:
+                cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)
+
+                # Converting the OpenCV rectangle coordinates to Dlib rectangle
+                dlib_rect = dlib.rectangle(int(x), int(y), int(x + w), int(y + h))
+
+                landmarks = np.matrix([[p.x, p.y]
+                                       for p in predictor(image, dlib_rect).parts()])
+
+                for idx, point in enumerate(landmarks):
+                    pos = (point[0, 0], point[0, 1])
+                    cv2.putText(image, str(idx), pos,
+                                fontFace=cv2.FONT_HERSHEY_SCRIPT_SIMPLEX,
+                                fontScale=0.4,
+                                color=(0, 0, 255))
+
+                    cv2.circle(image, pos, 2, color=(0, 255, 255), thickness=-1)
+
+            cv2.imshow("Landmarks found", image)
+            cv2.waitKey(0)
+
+
+        os.chdir(current_directory)
