@@ -1,0 +1,11 @@
+matplotlib==2.1.2
+librosa==0.6.0
+pytube==9.0.6
+numpy==1.13.3
+pydub==0.20.0
+imageio==2.1.2
+nltk==3.2.5
+textblob==0.15.0
+moviepy==0.2.3.2
+xmltodict==0.11.0
+dlib==19.9.0

@@ -1,11 +1,14 @@
 import os
 import nltk
 import string
+import itertools
 from textblob import TextBlob
 from pathlib import Path
 from nltk import word_tokenize
 from nltk.stem.wordnet import WordNetLemmatizer
 from nltk.corpus import stopwords
+from nltk.collocations import BigramCollocationFinder
+from nltk.metrics import BigramAssocMeasures
 nltk.download('punkt')
 nltk.download('averaged_perceptron_tagger')
 nltk.download('stopwords')
@@ -64,9 +67,11 @@ def generate_polarity_for_sentences(sentences, video_code):
         words = [nltk.stem.porter.PorterStemmer().stem(word) for word in words]
         words = [lemmatizer.lemmatize(word) for word in words]
 
-        tags = nltk.pos_tag(words)
+        bigrams = bigram_word_feats(words)
 
-        content = (start + duration_separator + end + polarity_separator + str([word for word in [tag for tag in tags]]) + '\n')
+        #tags = nltk.pos_tag(words)
+
+        content = (start + duration_separator + end + polarity_separator + str(bigrams) + '\n')
 
         file.write(content)
 
@@ -75,3 +80,7 @@ def generate_polarity_for_sentences(sentences, video_code):
     print('## TEXT POLARITY FILE GENERATED WITH SUCCESS! ##')
 
 
+def bigram_word_feats(words, score_fn=BigramAssocMeasures.chi_sq, n=200):
+    bigram_finder = BigramCollocationFinder.from_words(words)
+    bigrams = bigram_finder.nbest(score_fn, n)
+    return [ngram for ngram in itertools.chain(words, bigrams)]
