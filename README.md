@@ -6,10 +6,10 @@ Para rodar o projeto, algumas coisas precisam ser previamente instaladas.
 
   - Anaconda + Python 3.6
   - MongoDB
-  - FFMPEG
   - PyCharm
   - Git
   - HardLinkShell
+  - FFMPEG
 
 ### Anaconda
 
@@ -26,16 +26,6 @@ Para instalar o MongoDB, faça o download a partir da seguinte URL, na aba Commu
 https://www.mongodb.com/download-center#community
 
 OBS: Necessário criar o diretório "C:\data\db" para que o banco funcione.
-
-### FFMPEG
-
-Para instalar o FFMPEG, faça o download a partir da seguinte URL:
-
-https://ffmpeg.zeranoe.com/builds/
-
-Siga o seguinte tutorial para realizar a instalação corretamente:
-
-https://pt.wikihow.com/Instalar-o-FFmpeg-no-Windows
 
 ### PyCharm
 
@@ -99,6 +89,24 @@ EX: C:\Projects\Opinion Mining\venv\Scripts
 
 Clique com o botão direito dentro da pasta e selecione a opção "Soltar como..." e depois "Vínculo Simbólico".
 
+### FFMPEG
+
+Para instalar o FFMPEG, faça o download a partir da seguinte URL:
+
+https://ffmpeg.zeranoe.com/builds/
+
+Siga o seguinte tutorial para realizar a instalação corretamente:
+
+https://pt.wikihow.com/Instalar-o-FFmpeg-no-Windows
+
+Após realizar a instalação do FFMPEG, faça também o download do data que será utilizado para reconhecimento facial a partir da URL:
+
+http://dlib.net/files/shape_predictor_68_face_landmarks.dat.bz2
+
+Crie um diretório chamado "Data" na pasta "venv" do seu projeto, e coloque o arquivo "shape_predictor_68_face_landmarks.dat" neste diretório após ter feito a extração do mesmo.
+
+EX: C:\Projects\Opinion Mining\venv\Data\shape_predictor_68_face_landmarks.dat
+
 Com isso concluímos a instalação.
 
 Para executar o projeto, abra o PyCharm e vá até a pasta "Scripts/src" do seu projeto :
@@ -106,4 +114,3 @@ Para executar o projeto, abra o PyCharm e vá até a pasta "Scripts/src" do seu 
 EX: C:\Projects\Opinion Mining\venv\Scripts\src
 
 Clique com o botão direito em "main.py" e selecione "Run 'main'".
-
