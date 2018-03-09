@@ -1,10 +1,13 @@
 import librosa
 import os
 import numpy
+import pickle
 import imageio
 imageio.plugins.ffmpeg.download()
 import moviepy.editor as MovieEditor
 import matplotlib as plt
+import youtubeopinion.database.db as db
+from bson.binary import Binary
 from pathlib import Path
 from pydub import AudioSegment
 
@@ -53,61 +56,53 @@ def generate_audio_features(sentences, video_code):
     get_audio_from_video(video_code)
     audio_fragmentation(sentences, video_code)
 
-    print('## GENERATING AUDIO FEATURES ##')
+    database = db.get_db()
 
-    directory = '../../Data/Videos/' + str(video_code) + '/Extractions/'
-    complement = '_audio_features.txt'
-
-    file = Path(directory + str(video_code) + complement)
-
-    if not os.path.exists(directory):
-        os.makedirs(directory)
-
-    if file.is_file():
-        print('## AUDIO FEATURES FILE ALREADY GENERATED, SKIPPING THIS STEP. ##')
+    if database.audio_features.find_one({'video_code': video_code}) is not None:
+        print('## AUDIO FEATURES ALREADY GENERATED, SKIPPING THIS STEP. ##')
         return
 
-    file = open(directory + str(video_code) + complement, 'w')
+    print('## GENERATING AUDIO FEATURES ##')
 
     current_directory = os.getcwd()
 
     os.chdir(video_directory + str(video_code) + '/Fragments/Audio')
 
-    message = ''
+    database.audio_features.remove({'video_code': video_code})
 
     for code, sentence in sentences.items():
 
-        sentence_start = sentence['start']
-        sentence_end = sentence['end']
+        start = sentence['start']
+        end = sentence['end']
 
-        start = int(float(sentence['start']) * 1000)
+        sentence_start = int(float(sentence['start']) * 1000)
 
-        y, sr = librosa.load(video_code + fragment_extension + str(start) + wav_extension)
+        y, sr = librosa.load(video_code + fragment_extension + str(sentence_start) + wav_extension)
 
-        mfcc = librosa.feature.mfcc(y=y, sr=sr)
-        mel_spectrogram = librosa.feature.melspectrogram(y=y, sr=sr)
-        spectral_centroid = librosa.feature.spectral_centroid(y=y, sr=sr)
-        spectral_contrast = librosa.feature.spectral_contrast(y=y, sr=sr)
-        spectral_rolloff = librosa.feature.spectral_rolloff(y=y, sr=sr)
-        poly_features = librosa.feature.poly_features(y=y, sr=sr)
-        tonnetz = librosa.feature.tonnetz(y=y, sr=sr)
-        zero_crossing_rate = librosa.feature.zero_crossing_rate(y=y)
+        mfcc = Binary(pickle.dumps(librosa.feature.mfcc(y=y, sr=sr), protocol=2))
+        mel_spectrogram = Binary(pickle.dumps(librosa.feature.melspectrogram(y=y, sr=sr), protocol=2))
+        spectral_centroid = Binary(pickle.dumps(librosa.feature.spectral_centroid(y=y, sr=sr), protocol=2))
+        spectral_contrast = Binary(pickle.dumps(librosa.feature.spectral_contrast(y=y, sr=sr), protocol=2))
+        spectral_rolloff = Binary(pickle.dumps(librosa.feature.spectral_rolloff(y=y, sr=sr), protocol=2))
+        poly_features = Binary(pickle.dumps(librosa.feature.poly_features(y=y, sr=sr), protocol=2))
+        tonnetz = Binary(pickle.dumps(librosa.feature.tonnetz(y=y, sr=sr), protocol=2))
+        zero_crossing_rate = Binary(pickle.dumps(librosa.feature.zero_crossing_rate(y=y), protocol=2))
 
-        # [START-END]MFCC(MIN);MFCC(MAX)|MEL_SPEC(MIN);MEL_SPEC(MAX)|...
+        audio_feature = {
+            'video_code': video_code,
+            'start': start,
+            'end': end,
+            'mfcc': mfcc,
+            'mel_spectogram': mel_spectrogram,
+            'spectral_centroid': spectral_centroid,
+            'spectral_contrast': spectral_contrast,
+            'spectral_rolloff': spectral_rolloff,
+            'poly_features': poly_features,
+            'tonnetz': tonnetz,
+            'zero_crossing_rate': zero_crossing_rate
+        }
 
-        message += '[' + sentence_start + duration_separator + sentence_end + ']'
-        message += message_constructor(mfcc, 1)
-        message += message_constructor(mel_spectrogram, 1)
-        message += message_constructor(spectral_centroid, 1)
-        message += message_constructor(spectral_contrast, 1)
-        message += message_constructor(spectral_rolloff, 1)
-        message += message_constructor(poly_features, 1)
-        message += message_constructor(tonnetz, 1)
-        message += message_constructor(zero_crossing_rate, 0)
-
-
-    file.write(message)
-    file.close()
+        database.audio_features.insert(audio_feature)
 
     os.chdir(current_directory)
 
@@ -146,9 +141,3 @@ def audio_fragmentation(sentences, video_code):
         fragment.export(video_code + fragment_extension + str(start) + wav_extension, format="wav")
 
     os.chdir(current_directory)
-
-
-def message_constructor(value, add_separator):
-
-    return str(round(float(numpy.amin(value)), 2)) + values_separator + \
-           str(round(float(numpy.amax(value)), 2)) + (feature_separator if bool(add_separator) else '\n')

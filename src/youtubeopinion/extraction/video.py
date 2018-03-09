@@ -4,6 +4,7 @@ import os
 import glob
 import dlib
 import numpy as np
+import youtubeopinion.database.db as db
 from pathlib import Path
 from moviepy.tools import subprocess_call
 from moviepy.config import get_setting
@@ -16,14 +17,28 @@ video_extension = '.mp4'
 frame_extension = '.jpg'
 fragment_extension = '-fragment-'
 
-JAWLINE_POINTS = list(range(0, 17))
-RIGHT_EYEBROW_POINTS = list(range(17, 22))
-LEFT_EYEBROW_POINTS = list(range(22, 27))
-NOSE_POINTS = list(range(27, 36))
-RIGHT_EYE_POINTS = list(range(36, 42))
-LEFT_EYE_POINTS = list(range(42, 48))
-MOUTH_OUTLINE_POINTS = list(range(48, 61))
-MOUTH_INNER_POINTS = list(range(61, 68))
+#LEFT_EYE = 0
+#RIGHT_EYE = 1
+LEFT_EYE_INNER_CORNER = 40
+LEFT_EYE_OUTER_CORNER = 37
+LEFT_EYE_LOWER_LINE = 41
+LEFT_EYE_UPPER_LINE = 38
+#LEFT_EYE_LEFT_IRIS_CORNER = 29
+#LEFT_EYE_RIGHT_IRIS_CORNER = 30
+RIGHT_EYE_INNER_CORNER = 25
+RIGHT_EYE_OUTER_CORNER = 26
+RIGHT_EYE_LOWER_LINE = 48
+RIGHT_EYE_UPPER_LINE = 45
+#RIGHT_EYE_LEFT_IRIS_CORNER = 33
+#RIGHT_EYE_RIGHT_IRIS_CORNER = 34
+LEFT_EYEBROW_INNER_CORNER = 22
+LEFT_EYEBROW_MIDDLE = 20
+LEFT_EYEBROW_OUTER_CORNER = 18
+RIGHT_EYEBROW_INNER_CORNER = 23
+RIGHT_EYEBROW_MIDDLE = 25
+RIGHT_EYEBROW_OUTER_CORNER = 27
+MOUTH_TOP = 52
+MOUTH_BOTTOM = 58
 
 def get_video_from_youtube(video_code):
 
@@ -178,6 +193,11 @@ def extract_subclip(filename, t1, t2, fps, bv, targetname=None):
 
 
 def feature_extraction(sentences, video_code):
+    database = db.get_db()
+
+    if database.video_features.find_one({'video_code': video_code}) is not None:
+        print('## VIDEO FEATURES ALREADY GENERATED, SKIPPING THIS STEP. ##')
+        return
 
     videos_directory = '../../Data/Videos/' + str(video_code)
     fragments_directory = videos_directory + '/Fragments'
@@ -196,6 +216,8 @@ def feature_extraction(sentences, video_code):
 
         os.chdir(frames_directory + '/' + str(start))
 
+        print('## GENERATING FEATURE FOR SENTENCE ' + str(start) + ' ##')
+
         for file in os.listdir():
 
             # Read the image
@@ -211,8 +233,6 @@ def feature_extraction(sentences, video_code):
                 flags=cv2.CASCADE_SCALE_IMAGE
             )
 
-            print("Found {0} faces!".format(len(faces)))
-
             # Draw a rectangle around the faces
             for (x, y, w, h) in faces:
                 cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)
@@ -223,17 +243,37 @@ def feature_extraction(sentences, video_code):
                 landmarks = np.matrix([[p.x, p.y]
                                        for p in predictor(image, dlib_rect).parts()])
 
-                for idx, point in enumerate(landmarks):
-                    pos = (point[0, 0], point[0, 1])
-                    cv2.putText(image, str(idx), pos,
-                                fontFace=cv2.FONT_HERSHEY_SCRIPT_SIMPLEX,
-                                fontScale=0.4,
-                                color=(0, 0, 255))
+                #right_eye_left_eye = landmarks[RIGHT_EYE] - landmarks[LEFT_EYE]
+                inner_outer_corner_left_eye = landmarks[LEFT_EYE_INNER_CORNER] - landmarks[LEFT_EYE_OUTER_CORNER]
+                upper_lower_line_left_eye = landmarks[LEFT_EYE_UPPER_LINE] - landmarks[LEFT_EYE_LOWER_LINE]
+                #left_iris_corner_right_iris_corner_left_eye = landmarks[LEFT_EYE_LEFT_IRIS_CORNER] - landmarks[LEFT_EYE_RIGHT_IRIS_CORNER]
+                inner_outer_corner_right_eye = landmarks[RIGHT_EYE_INNER_CORNER] - landmarks[RIGHT_EYE_OUTER_CORNER]
+                upper_lower_line_right_eye = landmarks[RIGHT_EYE_UPPER_LINE] - landmarks[RIGHT_EYE_LOWER_LINE]
+                #left_iris_corner_right_iris_corner_right_eye = landmarks[RIGHT_EYE_LEFT_IRIS_CORNER] - landmarks[RIGHT_EYE_RIGHT_IRIS_CORNER]
+                left_eyebrow_inner_outer_corner = landmarks[LEFT_EYEBROW_INNER_CORNER] - landmarks[LEFT_EYEBROW_OUTER_CORNER]
+                right_eyebrow_inner_outer_corner = landmarks[RIGHT_EYEBROW_INNER_CORNER] - landmarks[RIGHT_EYEBROW_OUTER_CORNER]
+                top_mouth_bottom_mouth = landmarks[MOUTH_TOP] - landmarks[MOUTH_BOTTOM]
 
-                    cv2.circle(image, pos, 2, color=(0, 255, 255), thickness=-1)
+                video_feature = {
+                    'video_code': video_code,
+                    'start': start,
+                    'end': end,
+                    #'right_eye_left_eye': get_formatted_distance(right_eye_left_eye),
+                    'inner_outer_corner_left_eye': get_formatted_distance(inner_outer_corner_left_eye),
+                    'upper_lower_line_left_eye': get_formatted_distance(upper_lower_line_left_eye),
+                    #'left_iris_corner_right_iris_corner_left_eye': get_formatted_distance(left_iris_corner_right_iris_corner_left_eye),
+                    'inner_outer_corner_right_eye': get_formatted_distance(inner_outer_corner_right_eye),
+                    'upper_lower_line_right_eye': get_formatted_distance(upper_lower_line_right_eye),
+                    #'left_iris_corner_right_iris_corner_right_eye': get_formatted_distance(left_iris_corner_right_iris_corner_right_eye),
+                    'left_eyebrow_inner_outer_corner': get_formatted_distance(left_eyebrow_inner_outer_corner),
+                    'right_eyebrow_inner_outer_corner': get_formatted_distance(right_eyebrow_inner_outer_corner),
+                    'top_mouth_bottom_mouth': get_formatted_distance(top_mouth_bottom_mouth)
+                }
 
-            cv2.imshow("Landmarks found", image)
-            cv2.waitKey(0)
-
+                database.video_features.insert(video_feature)
 
         os.chdir(current_directory)
+
+
+def get_formatted_distance(matrix):
+    return '(' + str(matrix[(0, 0)]) + ', ' + str(matrix[(0, 1)]) + ')'

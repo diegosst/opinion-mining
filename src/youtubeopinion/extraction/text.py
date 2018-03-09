@@ -2,59 +2,36 @@ import os
 import nltk
 import string
 import itertools
-from textblob import TextBlob
+import youtubeopinion.database.db as db
 from pathlib import Path
 from nltk import word_tokenize
 from nltk.stem.wordnet import WordNetLemmatizer
 from nltk.corpus import stopwords
 from nltk.collocations import BigramCollocationFinder
 from nltk.metrics import BigramAssocMeasures
+
 nltk.download('punkt')
 nltk.download('averaged_perceptron_tagger')
 nltk.download('stopwords')
 nltk.download('wordnet')
 
 
-def get_sentence_polarity(text):
+def generate_text_features(sentences, video_code):
+    database = db.get_db()
 
-    blob = TextBlob(text)
-
-    if blob.sentiment.polarity > 0:
-        return 'positive'
-    elif blob.sentiment.polarity == 0:
-        return 'neutral'
-    else:
-        return 'negative'
-
-
-def generate_polarity_for_sentences(sentences, video_code):
-
-    print('## GENERATING TEXT POLARITY FILE ##')
-
-    directory = '../../Data/Videos/' + str(video_code) + '/Extractions/'
-    complement = '_sentences_polarity.txt'
-
-    file = Path(directory + str(video_code) + complement)
-
-    if not os.path.exists(directory):
-        os.makedirs(directory)
-
-    if file.is_file():
-        print('## TEXT POLARITY FILE ALREADY GENERATED, SKIPPING THIS STEP. ##')
+    if database.text_features.find_one({'video_code': video_code}) is not None:
+        print('## TEXT FEATURES ALREADY GENERATED, SKIPPING THIS STEP. ##')
         return
 
-    file = open(directory + str(video_code) + complement, 'w')
-
-    polarity_separator = str('|')
-    duration_separator = str('-')
+    print('## GENERATING TEXT FEATURES FILE ##')
 
     lemmatizer = WordNetLemmatizer()
 
-    for code, sentence in sentences.items():
+    database.text_features.remove({'video_code': video_code})
 
+    for code, sentence in sentences.items():
         start = sentence['start']
         end = sentence['end']
-        duration = sentence['duration']
         text = sentence['text']
 
         table = str.maketrans('', '', string.punctuation)
@@ -69,18 +46,20 @@ def generate_polarity_for_sentences(sentences, video_code):
 
         bigrams = bigram_word_feats(words)
 
-        #tags = nltk.pos_tag(words)
+        text_feature = {
+            'video_code': video_code,
+            'start': start,
+            'end': end,
+            'features': bigrams
+        }
 
-        content = (start + duration_separator + end + polarity_separator + str(bigrams) + '\n')
+        database.text_features.insert(text_feature)
 
-        file.write(content)
-
-    file.close()
-
-    print('## TEXT POLARITY FILE GENERATED WITH SUCCESS! ##')
+    print('## TEXT FEATURES GENERATED WITH SUCCESS! ##')
 
 
 def bigram_word_feats(words, score_fn=BigramAssocMeasures.chi_sq, n=200):
     bigram_finder = BigramCollocationFinder.from_words(words)
     bigrams = bigram_finder.nbest(score_fn, n)
+
     return [ngram for ngram in itertools.chain(words, bigrams)]
