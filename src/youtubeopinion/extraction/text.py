@@ -29,15 +29,15 @@ def generate_text_features(sentences, video_code):
 
     database.text_features.remove({'video_code': video_code})
 
-    for code, sentence in sentences.items():
+    for sentence in sentences:
         start = sentence['start']
         end = sentence['end']
         text = sentence['text']
 
         table = str.maketrans('', '', string.punctuation)
-        stop_words = set(stopwords.words('english'))
+        stop_words = set(stopwords.words('portuguese'))
 
-        words = word_tokenize(text)
+        words = word_tokenize(text, language='portuguese')
         words = [w.translate(table) for w in words]
         words = [w for w in words if not w in stop_words]
         words = [word for word in words if word.isalpha()]

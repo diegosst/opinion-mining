@@ -1,0 +1,10 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+
+# Selenium log
+geckodriver.log
+
+# General data files
+data/videos/
+

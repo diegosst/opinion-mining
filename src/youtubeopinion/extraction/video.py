@@ -10,8 +10,8 @@ from moviepy.tools import subprocess_call
 from moviepy.config import get_setting
 
 
-cascPath = "../../Lib/site-packages/cv2/data/haarcascade_frontalface_default.xml"
-PREDICTOR_PATH = "../../Data/shape_predictor_68_face_landmarks.dat"
+cascPath = "../data/haarcascade_frontalface_default.xml"
+PREDICTOR_PATH = "../data/shape_predictor_68_face_landmarks.dat/data"
 
 video_extension = '.mp4'
 frame_extension = '.jpg'
@@ -40,11 +40,12 @@ RIGHT_EYEBROW_OUTER_CORNER = 27
 MOUTH_TOP = 52
 MOUTH_BOTTOM = 58
 
+
 def get_video_from_youtube(video_code):
 
     print('## DOWNLOADING VIDEO FROM YOUTUBE ##')
 
-    videos_directory = '../../Data/Videos/' + str(video_code)
+    videos_directory = '../data/videos/' + str(video_code)
     current_directory = os.getcwd()
     file_name = ''
     separator = '/'
@@ -88,9 +89,9 @@ def generate_video_features(sentences, video_code):
 
 def video_fragmentation(sentences, video_code):
 
-    videos_directory = '../../Data/Videos/' + str(video_code)
-    fragments_directory = videos_directory + '/Fragments'
-    video_directory = fragments_directory + '/Video'
+    videos_directory = '../data/videos/' + str(video_code)
+    fragments_directory = videos_directory + '/fragments'
+    video_directory = fragments_directory + '/video'
 
     if not os.path.exists(fragments_directory):
         os.makedirs(fragments_directory)
@@ -104,26 +105,29 @@ def video_fragmentation(sentences, video_code):
 
     os.chdir(videos_directory)
 
-    for code, sentence in sentences.items():
+    for sentence in sentences:
 
-        start = float(sentence['start'])
-        end = float(sentence['end'])
+        start = int(sentence['start'])
+        end = int(sentence['end'])
 
-        fragment_name = (video_code + fragment_extension + str(int(start * 1000)) + video_extension)
+        fragment_name = (video_code + fragment_extension + str(start) + video_extension)
 
-        extract_subclip((video_code + video_extension), start, end, 30, 6000, targetname=(fragment_name))
+        if (start - end) == 0:
+            continue
 
-        os.rename(fragment_name, 'Fragments/Video/' + fragment_name)
+        extract_subclip((video_code + video_extension), start/1000, end/1000, 30, 6000, targetname=(fragment_name))
+
+        os.rename(fragment_name, 'fragments/video/' + fragment_name)
 
     os.chdir(current_directory)
 
 
 def frames_fragmentation(sentences, video_code):
 
-    videos_directory = '../../Data/Videos/' + str(video_code)
-    fragments_directory = videos_directory + '/Fragments'
-    video_directory = fragments_directory + '/Video'
-    frames_directory = fragments_directory + '/Frames'
+    videos_directory = '../data/videos/' + str(video_code)
+    fragments_directory = videos_directory + '/fragments'
+    video_directory = fragments_directory + '/video'
+    frames_directory = fragments_directory + '/frames'
 
     if not os.path.exists(fragments_directory):
         os.makedirs(fragments_directory)
@@ -139,17 +143,15 @@ def frames_fragmentation(sentences, video_code):
 
     print('## STARTING VIDEO FRAME EXTRACTION ##')
 
-    for code, sentence in sentences.items():
+    for sentence in sentences:
 
-        start = int(float(sentence['start']) * 1000)
-        end = int(float(sentence['end']) * 1000)
+        start = int(sentence['start'])
 
         print('## GENERATING FRAMES FOR VIDEO WITH START TIME ' + str(start) + ' ##')
 
         fragment_name = (video_code + fragment_extension + str(start) + video_extension)
-        frame_name = (video_code + fragment_extension + str(start) + frame_extension)
 
-        frame_folder = '../Frames/' + str(start)
+        frame_folder = '../frames/' + str(start)
 
         if not os.path.exists(frame_folder):
             os.makedirs(frame_folder)
@@ -199,9 +201,9 @@ def feature_extraction(sentences, video_code):
         print('## VIDEO FEATURES ALREADY GENERATED, SKIPPING THIS STEP. ##')
         return
 
-    videos_directory = '../../Data/Videos/' + str(video_code)
-    fragments_directory = videos_directory + '/Fragments'
-    frames_directory = fragments_directory + '/Frames'
+    videos_directory = '../data/videos/' + str(video_code)
+    fragments_directory = videos_directory + '/fragments'
+    frames_directory = fragments_directory + '/frames'
 
     current_directory = os.getcwd()
 
@@ -209,10 +211,10 @@ def feature_extraction(sentences, video_code):
 
     predictor = dlib.shape_predictor(PREDICTOR_PATH)
 
-    for code, sentence in sentences.items():
+    for sentence in sentences:
 
-        start = int(float(sentence['start']) * 1000)
-        end = int(float(sentence['end']) * 1000)
+        start = int(sentence['start'])
+        end = int(sentence['end'])
 
         os.chdir(frames_directory + '/' + str(start))
 

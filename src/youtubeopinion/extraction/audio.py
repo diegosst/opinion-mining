@@ -1,18 +1,16 @@
 import librosa
 import os
-import numpy
 import pickle
 import imageio
 imageio.plugins.ffmpeg.download()
 import moviepy.editor as MovieEditor
-import matplotlib as plt
 import youtubeopinion.database.db as db
 from bson.binary import Binary
 from pathlib import Path
 from pydub import AudioSegment
 
 
-video_directory = '../../Data/Videos/'
+video_directory = '../data/videos/'
 mp4_extension = '.mp4'
 mp3_extesion = '.mp3'
 wav_extension = '.wav'
@@ -21,15 +19,15 @@ values_separator = ';'
 feature_separator = '|'
 duration_separator = '-'
 
+
 def get_audio_from_video(video_code):
 
     print('## RETRIEVING AUDIO FROM VIDEO ##')
 
     current_directory = os.getcwd()
-    file_name = ''
     separator = '/'
 
-    file = Path(video_directory  + str(video_code) + separator + str(video_code) + mp3_extesion)
+    file = Path(video_directory + str(video_code) + separator + str(video_code) + mp3_extesion)
 
     if not os.path.exists(video_directory + str(video_code)):
         os.makedirs(video_directory + str(video_code))
@@ -53,29 +51,29 @@ def get_audio_from_video(video_code):
 
 def generate_audio_features(sentences, video_code):
 
-    get_audio_from_video(video_code)
-    audio_fragmentation(sentences, video_code)
-
     database = db.get_db()
 
     if database.audio_features.find_one({'video_code': video_code}) is not None:
         print('## AUDIO FEATURES ALREADY GENERATED, SKIPPING THIS STEP. ##')
         return
 
+    get_audio_from_video(video_code)
+    audio_fragmentation(sentences, video_code)
+
     print('## GENERATING AUDIO FEATURES ##')
 
     current_directory = os.getcwd()
 
-    os.chdir(video_directory + str(video_code) + '/Fragments/Audio')
+    os.chdir(video_directory + str(video_code) + '/fragments/audio')
 
     database.audio_features.remove({'video_code': video_code})
 
-    for code, sentence in sentences.items():
+    for sentence in sentences:
 
         start = sentence['start']
         end = sentence['end']
 
-        sentence_start = int(float(sentence['start']) * 1000)
+        sentence_start = int(start)
 
         y, sr = librosa.load(video_code + fragment_extension + str(sentence_start) + wav_extension)
 
@@ -111,8 +109,8 @@ def generate_audio_features(sentences, video_code):
 
 def audio_fragmentation(sentences, video_code):
 
-    fragments_directory = video_directory + str(video_code) + '/Fragments'
-    audio_directory = fragments_directory + '/Audio'
+    fragments_directory = video_directory + str(video_code) + '/fragments'
+    audio_directory = fragments_directory + '/audio'
 
     if not os.path.exists(fragments_directory):
         os.makedirs(fragments_directory)
@@ -131,10 +129,10 @@ def audio_fragmentation(sentences, video_code):
     os.chdir(current_directory)
     os.chdir(audio_directory)
 
-    for code, sentence in sentences.items():
+    for sentence in sentences:
 
-        start = int(float(sentence['start']) * 1000)
-        end = int(float(sentence['end']) * 1000)
+        start = int(sentence['start'])
+        end = int(sentence['end'])
 
         fragment = sound[start:end]
 
