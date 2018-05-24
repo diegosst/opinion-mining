@@ -7,7 +7,7 @@ import pymongo
 from selenium import webdriver
 from random import randrange
 from pathlib import Path
-import youtubeopinion.database.db as db
+import opinion.database.db as db
 
 
 def get_captions(code, sentences_limit):
@@ -93,13 +93,13 @@ def captions_format(result, code):
                     'start': milliseconds,
                     'timestampStart': start}
 
-        if last_index == len(result):
+        if last_index == (len(result) - 2):
 
             sentence.update({'end': duration})
             sentence.update({'timestampEnd': formatted_duration})
-            sentence.update({'duration': int(duration) - int(start)})
+            sentence.update({'duration': int(duration) - milliseconds})
 
-        elif last_index > -1:
+        if last_index > -1:
 
             sentences[last_index].update({'end': milliseconds})
             sentences[last_index].update({'timestampEnd': start})
@@ -125,9 +125,15 @@ def get_random_sentences(sentences, sentences_limit):
 
         end = (start + sentences_limit)
 
-    elif (start - 100) > 0:
+    elif (start - sentences_limit) > 0:
 
-        end = (start - 100)
+        end = start
+        start = (start - sentences_limit)
+
+    elif size > sentences_limit:
+
+        start = randrange(0, (size - sentences_limit))
+        end = (start + sentences_limit)
 
     else:
 

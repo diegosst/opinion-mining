@@ -3,8 +3,9 @@ import cv2
 import os
 import glob
 import dlib
+import math
 import numpy as np
-import youtubeopinion.database.db as db
+import opinion.database.db as db
 from pathlib import Path
 from moviepy.tools import subprocess_call
 from moviepy.config import get_setting
@@ -17,28 +18,30 @@ video_extension = '.mp4'
 frame_extension = '.jpg'
 fragment_extension = '-fragment-'
 
-#LEFT_EYE = 0
-#RIGHT_EYE = 1
-LEFT_EYE_INNER_CORNER = 40
-LEFT_EYE_OUTER_CORNER = 37
-LEFT_EYE_LOWER_LINE = 41
-LEFT_EYE_UPPER_LINE = 38
-#LEFT_EYE_LEFT_IRIS_CORNER = 29
-#LEFT_EYE_RIGHT_IRIS_CORNER = 30
-RIGHT_EYE_INNER_CORNER = 25
-RIGHT_EYE_OUTER_CORNER = 26
-RIGHT_EYE_LOWER_LINE = 48
-RIGHT_EYE_UPPER_LINE = 45
-#RIGHT_EYE_LEFT_IRIS_CORNER = 33
-#RIGHT_EYE_RIGHT_IRIS_CORNER = 34
-LEFT_EYEBROW_INNER_CORNER = 22
-LEFT_EYEBROW_MIDDLE = 20
-LEFT_EYEBROW_OUTER_CORNER = 18
-RIGHT_EYEBROW_INNER_CORNER = 23
-RIGHT_EYEBROW_MIDDLE = 25
-RIGHT_EYEBROW_OUTER_CORNER = 27
-MOUTH_TOP = 52
-MOUTH_BOTTOM = 58
+LEFT_EYE_TOP_MIDDLE = 37
+LEFT_EYE_BOTTOM_MIDDLE = 41
+LEFT_EYE_RIGHT_POINT = 39
+LEFT_EYE_LEFT_POINT = 36
+
+RIGHT_EYE_TOP_MIDDLE = 44
+RIGHT_EYE_BOTTOM_MIDDLE = 46
+RIGHT_EYE_RIGHT_POINT = 45
+RIGHT_EYE_LEFT_POINT = 42
+
+MOUTH_TOP_MIDDLE = 51
+MOUTH_BOTTOM_MIDDLE = 57
+MOUTH_RIGHT_POINT = 54
+MOUTH_LEFT_POINT = 48
+
+RIGHT_EYEBROW_MIDDLE = 24
+RIGHT_EYEBROW_RIGHT_POINT = 26
+RIGHT_EYEBROW_LEFT_POINT = 22
+
+LEFT_EYEBROW_MIDDLE = 19
+LEFT_EYEBROW_RIGHT_POINT = 21
+LEFT_EYEBROW_LEFT_POINT = 17
+
+NOSE_BOTTOM_POINT = 33
 
 
 def get_video_from_youtube(video_code):
@@ -211,6 +214,12 @@ def feature_extraction(sentences, video_code):
 
     predictor = dlib.shape_predictor(PREDICTOR_PATH)
 
+    frames_size = 0
+
+    faces_zero = 0
+    faces_one = 0
+    faces_more_than_one = 0
+
     for sentence in sentences:
 
         start = int(sentence['start'])
@@ -219,6 +228,8 @@ def feature_extraction(sentences, video_code):
         os.chdir(frames_directory + '/' + str(start))
 
         print('## GENERATING FEATURE FOR SENTENCE ' + str(start) + ' ##')
+
+        frames_size += len(os.listdir())
 
         for file in os.listdir():
 
@@ -230,10 +241,17 @@ def feature_extraction(sentences, video_code):
             faces = faceCascade.detectMultiScale(
                 gray,
                 scaleFactor=1.05,
-                minNeighbors=5,
-                minSize=(100, 100),
+                minNeighbors=20,
+                minSize=(30, 30),
                 flags=cv2.CASCADE_SCALE_IMAGE
             )
+
+            if len(faces) < 1:
+                faces_zero += 1
+            elif len(faces) == 1:
+                faces_one += 1
+            else:
+                faces_more_than_one += 1
 
             # Draw a rectangle around the faces
             for (x, y, w, h) in faces:
@@ -245,37 +263,60 @@ def feature_extraction(sentences, video_code):
                 landmarks = np.matrix([[p.x, p.y]
                                        for p in predictor(image, dlib_rect).parts()])
 
-                #right_eye_left_eye = landmarks[RIGHT_EYE] - landmarks[LEFT_EYE]
-                inner_outer_corner_left_eye = landmarks[LEFT_EYE_INNER_CORNER] - landmarks[LEFT_EYE_OUTER_CORNER]
-                upper_lower_line_left_eye = landmarks[LEFT_EYE_UPPER_LINE] - landmarks[LEFT_EYE_LOWER_LINE]
-                #left_iris_corner_right_iris_corner_left_eye = landmarks[LEFT_EYE_LEFT_IRIS_CORNER] - landmarks[LEFT_EYE_RIGHT_IRIS_CORNER]
-                inner_outer_corner_right_eye = landmarks[RIGHT_EYE_INNER_CORNER] - landmarks[RIGHT_EYE_OUTER_CORNER]
-                upper_lower_line_right_eye = landmarks[RIGHT_EYE_UPPER_LINE] - landmarks[RIGHT_EYE_LOWER_LINE]
-                #left_iris_corner_right_iris_corner_right_eye = landmarks[RIGHT_EYE_LEFT_IRIS_CORNER] - landmarks[RIGHT_EYE_RIGHT_IRIS_CORNER]
-                left_eyebrow_inner_outer_corner = landmarks[LEFT_EYEBROW_INNER_CORNER] - landmarks[LEFT_EYEBROW_OUTER_CORNER]
-                right_eyebrow_inner_outer_corner = landmarks[RIGHT_EYEBROW_INNER_CORNER] - landmarks[RIGHT_EYEBROW_OUTER_CORNER]
-                top_mouth_bottom_mouth = landmarks[MOUTH_TOP] - landmarks[MOUTH_BOTTOM]
+                mouth_horizontal = calculate_distance(landmarks[MOUTH_RIGHT_POINT], landmarks[MOUTH_LEFT_POINT])
+                mouth_vertical = calculate_distance(landmarks[MOUTH_TOP_MIDDLE], landmarks[MOUTH_BOTTOM_MIDDLE])
+                nose_to_mouth_left = calculate_distance(landmarks[NOSE_BOTTOM_POINT], landmarks[MOUTH_LEFT_POINT])
+                nose_to_mouth_right = calculate_distance(landmarks[NOSE_BOTTOM_POINT], landmarks[MOUTH_RIGHT_POINT])
+                nose_to_right_eyebrow_left = calculate_distance(landmarks[NOSE_BOTTOM_POINT], landmarks[RIGHT_EYEBROW_LEFT_POINT])
+                nose_to_right_eyebrow_right = calculate_distance(landmarks[NOSE_BOTTOM_POINT], landmarks[RIGHT_EYEBROW_RIGHT_POINT])
+                nose_to_left_eyebrow_right = calculate_distance(landmarks[NOSE_BOTTOM_POINT], landmarks[LEFT_EYEBROW_RIGHT_POINT])
+                nose_to_left_eyebrow_left = calculate_distance(landmarks[NOSE_BOTTOM_POINT], landmarks[LEFT_EYEBROW_LEFT_POINT])
+                left_eye_horizontal = calculate_distance(landmarks[LEFT_EYE_LEFT_POINT], landmarks[LEFT_EYE_RIGHT_POINT])
+                left_eye_vertical = calculate_distance(landmarks[LEFT_EYE_TOP_MIDDLE], landmarks[LEFT_EYE_BOTTOM_MIDDLE])
+                left_eye_right_to_mouth_left = calculate_distance(landmarks[LEFT_EYE_RIGHT_POINT], landmarks[MOUTH_LEFT_POINT])
+                right_eye_horizontal = calculate_distance(landmarks[RIGHT_EYE_LEFT_POINT], landmarks[RIGHT_EYE_RIGHT_POINT])
+                right_eye_vertical = calculate_distance(landmarks[RIGHT_EYE_TOP_MIDDLE], landmarks[RIGHT_EYE_BOTTOM_MIDDLE])
+                right_eye_left_to_mouth_right = calculate_distance(landmarks[RIGHT_EYE_LEFT_POINT], landmarks[MOUTH_RIGHT_POINT])
+                eyebrows_distance = calculate_distance(landmarks[LEFT_EYEBROW_RIGHT_POINT], landmarks[RIGHT_EYEBROW_LEFT_POINT])
+                right_eyebrow_middle_to_right_eye_top = calculate_distance(landmarks[RIGHT_EYEBROW_MIDDLE], landmarks[RIGHT_EYE_TOP_MIDDLE])
+                right_eyebrow_middle_to_right_eye_bottom = calculate_distance(landmarks[RIGHT_EYEBROW_MIDDLE], landmarks[RIGHT_EYE_BOTTOM_MIDDLE])
+                left_eyebrow_middle_to_left_eye_top = calculate_distance(landmarks[LEFT_EYEBROW_MIDDLE], landmarks[LEFT_EYE_TOP_MIDDLE])
+                left_eyebrow_middle_to_left_eye_bottom = calculate_distance(landmarks[LEFT_EYEBROW_MIDDLE], landmarks[LEFT_EYE_BOTTOM_MIDDLE])
 
                 video_feature = {
                     'video_code': video_code,
                     'start': start,
                     'end': end,
-                    #'right_eye_left_eye': get_formatted_distance(right_eye_left_eye),
-                    'inner_outer_corner_left_eye': get_formatted_distance(inner_outer_corner_left_eye),
-                    'upper_lower_line_left_eye': get_formatted_distance(upper_lower_line_left_eye),
-                    #'left_iris_corner_right_iris_corner_left_eye': get_formatted_distance(left_iris_corner_right_iris_corner_left_eye),
-                    'inner_outer_corner_right_eye': get_formatted_distance(inner_outer_corner_right_eye),
-                    'upper_lower_line_right_eye': get_formatted_distance(upper_lower_line_right_eye),
-                    #'left_iris_corner_right_iris_corner_right_eye': get_formatted_distance(left_iris_corner_right_iris_corner_right_eye),
-                    'left_eyebrow_inner_outer_corner': get_formatted_distance(left_eyebrow_inner_outer_corner),
-                    'right_eyebrow_inner_outer_corner': get_formatted_distance(right_eyebrow_inner_outer_corner),
-                    'top_mouth_bottom_mouth': get_formatted_distance(top_mouth_bottom_mouth)
+                    'mouth_horizontal': mouth_horizontal,
+                    'mouth_vertical': mouth_vertical,
+                    'nose_to_mouth_left': nose_to_mouth_left,
+                    'nose_to_mouth_right': nose_to_mouth_right,
+                    'nose_to_right_eyebrow_left': nose_to_right_eyebrow_left,
+                    'nose_to_right_eyebrow_right': nose_to_right_eyebrow_right,
+                    'nose_to_left_eyebrow_right': nose_to_left_eyebrow_right,
+                    'nose_to_left_eyebrow_left': nose_to_left_eyebrow_left,
+                    'left_eye_horizontal': left_eye_horizontal,
+                    'left_eye_vertical': left_eye_vertical,
+                    'left_eye_right_to_mouth_left': left_eye_right_to_mouth_left,
+                    'right_eye_horizontal': right_eye_horizontal,
+                    'right_eye_vertical': right_eye_vertical,
+                    'right_eye_left_to_mouth_right': right_eye_left_to_mouth_right,
+                    'eyebrows_distance': eyebrows_distance,
+                    'right_eyebrow_middle_to_right_eye_top': right_eyebrow_middle_to_right_eye_top,
+                    'right_eyebrow_middle_to_right_eye_bottom': right_eyebrow_middle_to_right_eye_bottom,
+                    'left_eyebrow_middle_to_left_eye_top': left_eyebrow_middle_to_left_eye_top,
+                    'left_eyebrow_middle_to_left_eye_bottom': left_eyebrow_middle_to_left_eye_bottom
                 }
 
                 database.video_features.insert(video_feature)
 
         os.chdir(current_directory)
 
+    print('No faces per frame accurancy: ' + str(faces_zero / frames_size))
+    print('One face per frame accurancy: ' + str(faces_one / frames_size))
+    print('More than one face per frame accurancy: ' + str(faces_more_than_one / frames_size))
 
-def get_formatted_distance(matrix):
-    return '(' + str(matrix[(0, 0)]) + ', ' + str(matrix[(0, 1)]) + ')'
+
+def calculate_distance(x, y):
+
+    return math.sqrt((math.pow(x[(0, 0)] - y[(0, 0)], 2) + math.pow(x[(0, 1)] - y[(0, 1)], 2)))

@@ -1,10 +1,10 @@
 import librosa
 import os
-import pickle
+import _pickle as pickle
 import imageio
 imageio.plugins.ffmpeg.download()
 import moviepy.editor as MovieEditor
-import youtubeopinion.database.db as db
+import opinion.database.db as db
 from bson.binary import Binary
 from pathlib import Path
 from pydub import AudioSegment
