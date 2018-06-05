@@ -1,18 +1,29 @@
 import _pickle as pickle
+
 import pymongo
-import numpy as np
 from pymongo import MongoClient
-from opinion.analysis.svm import get_multimodal_features
+
 import opinion.extraction.extractor as extractor
 import opinion.helper.util as util
+import opinion.transcription.caption as caption
+from opinion.analysis.svm import get_multimodal_features
 
-# Model codes:
-# 0 - Video
-# 1 - Audio
-# 2 - Text
-# 3 - Multimodal
+# Model code represents the type of analysis.
+# Note: * means frames average for video modality
+#
+# 1         : video*
+# 2         : audio
+# 3         : text
+# 4         : multimodal: video* + audio
+# 5         : multimodal: video* + text
+# 6         : multimodal: audio + text
+# 7         : multimodal: audio + text + video*
+# 8         : video
+# 9         : multimodal: video + audio
+# 10        : multimodal: video + text
+# 11        : multimodal: audio + video + text
 
-model_code = 3
+model_code = 7
 
 
 def analyse(video_code):
@@ -27,18 +38,24 @@ def analyse(video_code):
 
     database = client.opinion_database
 
-    model = pickle.loads(list(database.models.find({'code': model_code}).sort('version', pymongo.DESCENDING))[0]['model'])
+    try:
+
+        model = pickle.loads(list(database.models.find({'code': model_code, 'model': {"$exists": True, "$ne": ""}}).sort('test_precision', pymongo.DESCENDING))[0]['model'])
+
+    except IndexError:
+
+        print('No model found for code %d.' % model_code)
+
+        return
 
     sentences = database.sentences.find({'video_code': video_code}).sort('start', pymongo.ASCENDING)
 
     results = []
     indexes = []
 
-    sentiment = dict()
-
     for i in range(0, sentences.count()):
 
-        for result in get_multimodal_features(video_code, sentences[i], database):
+        for result in get_multimodal_features(video_code, sentences[i], database, True):
 
             results.append(result)
             indexes.append(i)
@@ -73,34 +90,22 @@ def analyse(video_code):
 
             print('Sentence: %50s | Sentiment: %5.2f' % (sentences[i]['text'], sum/len(sentences_predict[i])))
 
-            sentiments.append(sum/len(sentences_predict[i]))
+            var = dict()
+            var['sentence'] = sentences[i]['text']
+            var['start'] = sentences[i]['timestampStart']
+            var['end'] = sentences[i]['timestampEnd']
+            var['sentiment'] = sum/len(sentences_predict[i])
+
+            sentiments.append(var)
 
         except KeyError:
 
             continue
 
-    sentiments_sum = 0
-
-    for sentiment in sentiments:
-
-        sentiments_sum += sentiment
-
-    result = (int(sentiments_sum)/len(sentiments))
-
-    print('Sentences sentiment mean: %0.2f' % result)
-
-    if result < -0.15:
-
-        print('Polarity is negative.')
-
-    elif result > 0.15:
-
-        print('Polarity is positive.')
-
-    else:
-
-        print('Polarity is neutral.')
-
     end_time = util.current_milli_time()
 
     print('Finished analysing video for code: %s | Execution time: %d ms' % (video_code, end_time - start_time))
+
+    caption.generate_excel(sentences, video_code, sentiments, 2)
+
+    return sentiments

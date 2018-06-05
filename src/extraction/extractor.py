@@ -17,10 +17,9 @@ def extract(video_code):
 
     sentences = Caption.get_captions(video_code, sentences_limit)
 
-    extract_entities(sentences, video_code)
-    # generate_text_features(sentences, video_code)
-    # generate_audio_features(sentences, video_code)
-    # generate_video_features(sentences, video_code)
+    generate_text_features(sentences, video_code)
+    generate_audio_features(sentences, video_code)
+    generate_video_features(sentences, video_code)
 
     end_time = util.current_milli_time()
 

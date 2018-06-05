@@ -1,14 +1,13 @@
 import _pickle as pickle
 import os
 import random
-import math
+
 import numpy as np
 import pandas
 import pymongo
 from pymongo import MongoClient
-from sklearn.metrics import recall_score, make_scorer
-from sklearn.model_selection import KFold, cross_validate
-from sklearn.svm import SVC
+from sklearn.metrics import recall_score, precision_score
+from sklearn.svm import LinearSVC
 
 import opinion.helper.util as util
 
@@ -16,7 +15,7 @@ video_features_quantity = 19
 audio_features_quantity = 8
 
 
-def training_model(X, y, code, limit, preparation_time, option, one_disabled, save):
+def training_model(datas, code, limit, preparation_time, option, one_disabled, save):
 
     start_time = util.current_milli_time()
 
@@ -24,29 +23,18 @@ def training_model(X, y, code, limit, preparation_time, option, one_disabled, sa
 
     database = client.opinion_database
 
-    splits = 3
-    k_fold = KFold(n_splits=splits, shuffle=True)
-    svc = SVC()
+    scores = cross_validation(datas)
 
-    for train, test in k_fold.split(X):
-        svc.fit(X[train], y[train]).score(X[test], y[test])
+    if save:
+        svc = LinearSVC()
+        for data in datas:
+            svc.fit(data['x'], data['y'])
 
-    scoring = {'precision': 'precision_macro', 'recall': make_scorer(recall_score, average='macro')}
+    precision = np.average(scores['precision'])
+    recall = np.average(scores['recall'])
 
-    scores = cross_validate(svc, X, y, scoring=scoring, cv=k_fold, return_train_score=True)
-
-    train_precision = scores['train_precision'].mean()
-    train_recall = scores['train_recall'].mean()
-    test_precision = scores['test_precision'].mean()
-    test_recall = scores['test_recall'].mean()
-
-    print("Precision: %0.2f (+/- %0.2f)" % (train_precision, scores['train_precision'].std() * 2))
-    print("Recall: %0.2f (+/- %0.2f)" % (train_recall, scores['train_recall'].std() * 2))
-    print("Test precision:")
-    print("Precision: %0.2f (+/- %0.2f)" % (test_precision, scores['test_precision'].std() * 2))
-    print("Recall: %0.2f (+/- %0.2f)" % (test_recall, scores['test_recall'].std() * 2))
-
-    end_time = util.current_milli_time()
+    print("Precision: %0.2f" % precision)
+    print("Recall: %0.2f" % recall)
 
     if one_disabled is None:
         features_selection = 'all'
@@ -56,13 +44,15 @@ def training_model(X, y, code, limit, preparation_time, option, one_disabled, sa
         features_selection = 'one_active'
 
     version = database.models.find({'code': code, 'features_selection': features_selection, 'option': option}).count() + 1
+    splits = 5
+
+    end_time = util.current_milli_time()
 
     model = {'code': code,
              'model': pickle.dumps(svc) if save else '',
-             'train_precision': train_precision,
-             'train_recall': train_recall,
-             'test_precision': test_precision,
-             'test_recall': test_recall,
+             'type': 'tree',
+             'precision': precision,
+             'recall': recall,
              'limit': limit,
              'kfold': splits,
              'version': version,
@@ -75,6 +65,35 @@ def training_model(X, y, code, limit, preparation_time, option, one_disabled, sa
     database.models.insert(model)
 
     client.close()
+
+
+def cross_validation(datas):
+
+    scores = dict()
+    scores['precision'] = []
+    scores['recall'] = []
+
+    for i in range(0, len(datas)):
+
+        svc = LinearSVC()
+
+        for j in range(0, len(datas)):
+            if j != i:
+                x_train = datas[j]['x']
+                y_train = datas[j]['y']
+                svc.fit(x_train, y_train)
+
+        test = datas[i]
+
+        x_test = test['x']
+        y_test = test['y']
+
+        y_score = svc.predict(x_test)
+
+        scores['precision'].append(precision_score(y_test, y_score, average="micro"))
+        scores['recall'].append(recall_score(y_test, y_score, average="micro"))
+
+    return scores
 
 
 def generate_annotation_data():
@@ -124,6 +143,31 @@ def generate_annotation_data():
     client.close()
 
 
+def get_test_and_train_annotations(limit, k):
+
+    annotations = get_annotation_data(limit)
+
+    size = len(annotations)
+
+    division = size // k
+    rest = size % k
+
+    start = 0
+    end = division
+
+    splits = []
+
+    for i in range(0, k):
+        splits.append(annotations[start:end])
+        start = end
+        end += division
+
+    if rest != 0:
+        splits[len(splits) - 1] = splits[len(splits) - 1] + annotations[(start + division):len(annotations)]
+
+    return splits
+
+
 def get_annotation_data(limit):
 
     client = MongoClient('localhost', 27017)
@@ -139,15 +183,13 @@ def get_annotation_data(limit):
     print('Neutral: %d' % len(annotations_neutral))
     print('Positive: %d' % len(annotations_positive))
 
-    results = dict()
+    annotations = annotations_positive + annotations_neutral + annotations_negative
 
-    append_results(results, annotations_negative)
-    append_results(results, annotations_neutral)
-    append_results(results, annotations_positive)
+    random.shuffle(annotations)
 
     client.close()
 
-    return results
+    return annotations
 
 
 def get_annotation(database, polarity, limit):
@@ -162,9 +204,7 @@ def get_annotation(database, polarity, limit):
 
     for index in indexes:
 
-        video_code = annotations[index]['video_code']
-
-        features = get_text_features(video_code, annotations[index], database)
+        features = get_text_features(annotations[index], database)
 
         if features is not None:
 
@@ -189,67 +229,114 @@ def append_results(results, annotations):
         results[video_code].append(annotation)
 
 
-def get_features_data(code, all_annotations, video_options, audio_options):
+def get_train_and_test_data(code, splits, video_options, audio_options):
 
-    # Code represents the type of analysis.
-    # 1         : audio
-    # 2         : text
-    # 3         : multimodal
-    # 4         : video filtered
-    # any other : video
+    start_time = util.current_milli_time()
+
+    datas = []
+
+    for annotations in splits:
+
+        x, y = get_features_data(code, annotations, video_options, audio_options)
+
+        datas.append({'x': x, 'y': y})
+
+    end_time = util.current_milli_time()
+
+    return datas, end_time - start_time
+
+
+# Code represents the type of analysis.
+# Note: * means frames average for video modality
+#
+# 1         : video*
+# 2         : audio
+# 3         : text
+# 4         : multimodal: video* + audio
+# 5         : multimodal: video* + text
+# 6         : multimodal: audio + text
+# 7         : multimodal: audio + text + video*
+# 8         : video
+# 9         : multimodal: video + audio
+# 10        : multimodal: video + text
+# 11        : multimodal: audio + video + text
+def get_features_data(code, annotations, video_options, audio_options):
 
     x = []
     y = []
 
-    start_time = util.current_milli_time()
+    client = MongoClient('localhost', 27017)
 
-    for video_code, annotations in all_annotations.items():
+    database = client.opinion_database
 
-        client = MongoClient('localhost', 27017)
+    positives = []
+    neutrals = []
+    negatives = []
 
-        database = client.opinion_database
+    for annotation in annotations:
 
-        positives = []
-        neutrals = []
-        negatives = []
+        if code is 1:
 
-        for annotation in annotations:
+            results = get_video_features_filtered(annotation, database, video_options)
 
-            if code is 1:
+        elif code is 2:
 
-                results = get_audio_features(video_code, annotation, database, audio_options)
+            results = get_audio_features(annotation, database, audio_options)
 
-            elif code is 2:
+        elif code is 3:
 
-                results = get_text_features(video_code, annotation, database)
+            results = get_text_features(annotation, database)
 
-            elif code is 3:
+        elif code is 4:
 
-                results = get_multimodal_features(video_code, annotation, database)
+            results = get_bimodal_va_features(annotation, database, True)
 
-            elif code is 4:
+        elif code is 5:
 
-                results = get_video_features_filtered(get_video_features(video_code, annotation, database, video_options))
+            results = get_bimodal_vt_features(annotation, database, True)
 
-                results = [result for result in results if type(result) == list]
+        elif code is 6:
+
+            results = get_bimodal_at_features(annotation, database)
+
+        elif code is 7:
+
+            results = get_multimodal_features(annotation, database, True)
+
+        elif code is 8:
+
+            results = get_video_features(annotation, database, video_options)
+
+        elif code is 9:
+
+            results = get_bimodal_va_features(annotation, database, False)
+
+        elif code is 10:
+
+            results = get_bimodal_vt_features(annotation, database, False)
+
+        elif code is 11:
+
+            results = get_multimodal_features(annotation, database, False)
+
+        else:
+
+            print('Could not find model type for code %d.' % code)
+            return
+
+        for result in results:
+
+            if annotation['sentiment'] == 1:
+
+                positives.append(result)
+
+            elif annotation['sentiment'] == -1:
+
+                negatives.append(result)
 
             else:
 
-                results = get_video_features(video_code, annotation, database, video_options)
-
-            for result in results:
-
-                if annotation['sentiment'] == 1:
-
-                    positives.append(result)
-
-                elif annotation['sentiment'] == -1:
-
-                    negatives.append(result)
-
-                else:
-
-                    neutrals.append(result)
+                neutrals.append(result)
 
         positives_np = np.array(positives)
         negatives_np = np.array(negatives)
@@ -266,16 +353,27 @@ def get_features_data(code, all_annotations, video_options, audio_options):
             try:
                 X = np.append(X, negatives_np, axis=0)
             except ValueError:
-                print("MEU CU")
+                X = negatives_np
+
         if neutrals_np.size != 0:
-            X = np.append(X, neutrals_np, axis=0)
+
+            try:
+                X = np.append(X, neutrals_np, axis=0)
+            except ValueError:
+                X = neutrals_np
 
         Y = ones
 
         if minus_ones.size != 0:
-            Y = np.append(Y, minus_ones, axis=0)
+            try:
+                Y = np.append(Y, minus_ones, axis=0)
+            except ValueError:
+                Y = minus_ones
         if zeros.size != 0:
-            Y = np.append(Y, zeros, axis=0)
+            try:
+                Y = np.append(Y, zeros, axis=0)
+            except ValueError:
+                Y = zeros
 
         if len(x) == 0:
             x = X
@@ -287,14 +385,12 @@ def get_features_data(code, all_annotations, video_options, audio_options):
         else:
             y = np.concatenate([y, Y], axis=0)
 
-    end_time = util.current_milli_time()
-
-    return x, y, end_time - start_time
+    return x, y
 
 
-def get_video_features(video_code, annotation, database, video_options):
+def get_video_features(annotation, database, video_options):
 
-    sentences = database.video_features.find({'video_code': video_code, 'start': int(annotation['start']), 'end': int(annotation['end'])}).sort('start', pymongo.ASCENDING)
+    sentences = database.video_features.find({'video_code': annotation['video_code'], 'start': int(annotation['start']), 'end': int(annotation['end'])}).sort('start', pymongo.ASCENDING)
 
     if video_options is None:
         video_options = np.full(video_features_quantity, 1)
@@ -349,18 +445,20 @@ def get_video_features(video_code, annotation, database, video_options):
     return results
 
 
-def get_video_features_filtered(results):
+def get_video_features_filtered(annotation, database, video_options):
 
-    filtered = list()
+    results = get_video_features(annotation, database, video_options)
 
-    filtered.append(np.average(np.array(results), axis=0).tolist())
+    filtereds = list()
 
-    return filtered
+    filtereds.append(np.average(np.array(results), axis=0).tolist())
+
+    return [filtered for filtered in filtereds if type(filtered) == list]
 
 
-def get_audio_features(video_code, annotation, database, audio_options):
+def get_audio_features(annotation, database, audio_options):
 
-    sentences = database.audio_features.find({'video_code': video_code, 'start': int(annotation['start']), 'end': int(annotation['end'])}).sort('start', pymongo.ASCENDING)
+    sentences = database.audio_features.find({'video_code': annotation['video_code'], 'start': int(annotation['start']), 'end': int(annotation['end'])}).sort('start', pymongo.ASCENDING)
 
     # answer to life the universe and everything plus 1
     sec_size = 42 + 1
@@ -418,9 +516,9 @@ def get_audio_features(video_code, annotation, database, audio_options):
     return results
 
 
-def get_text_features(video_code, annotation, database):
+def get_text_features(annotation, database):
 
-    sentences = database.text_features.find({'video_code': video_code, 'start': int(annotation['start']), 'end': int(annotation['end'])}).sort('start', pymongo.ASCENDING)
+    sentences = database.text_features.find({'video_code': annotation['video_code'], 'start': int(annotation['start']), 'end': int(annotation['end'])}).sort('start', pymongo.ASCENDING)
 
     words = []
     ngrams = []
@@ -451,11 +549,13 @@ def get_text_features(video_code, annotation, database):
     return ngrams
 
 
-def get_multimodal_features(video_code, annotation, database):
+def get_multimodal_features(annotation, database, filtered):
 
-    videos = get_video_features(video_code, annotation, database, None)
-    audios = get_audio_features(video_code, annotation, database, None)
-    texts = get_text_features(video_code, annotation, database)
+    videos = get_video_features(annotation, database, None) if not filtered \
+        else get_video_features_filtered(annotation, database, None)
+
+    audios = get_audio_features(annotation, database, None)
+    texts = get_text_features(annotation, database)
 
     results = []
 
@@ -473,6 +573,74 @@ def get_multimodal_features(video_code, annotation, database):
                 result = np.concatenate([text, audio, video], axis=0)
 
                 results.append(result)
+
+    return results
+
+
+def get_bimodal_va_features(annotation, database, filtered):
+
+    videos = get_video_features(annotation, database, None) if not filtered \
+        else get_video_features_filtered(annotation, database, None)
+
+    audios = get_audio_features(annotation, database, None)
+
+    results = []
+
+    for v in range(0, len(videos)):
+
+        video = np.array(videos)[v, ]
+
+        for a in range(0, len(audios)):
+
+            audio = np.array(audios)[a, ]
+
+            result = np.concatenate([audio, video], axis=0)
+
+            results.append(result)
+
+    return results
+
+
+def get_bimodal_vt_features(annotation, database, filtered):
+
+    videos = get_video_features(annotation, database, None) if not filtered \
+        else get_video_features_filtered(annotation, database, None)
+
+    texts = get_text_features(annotation, database)
+
+    results = []
+
+    for v in range(0, len(videos)):
+
+        video = np.array(videos)[v, ]
+
+        for t in range(0, len(texts)):
+
+            text = np.array(texts)[t, ]
+            result = np.concatenate([text, video], axis=0)
+
+            results.append(result)
+
+    return results
+
+
+def get_bimodal_at_features(annotation, database):
+
+    audios = get_audio_features(annotation, database, None)
+    texts = get_text_features(annotation, database)
+
+    results = []
+
+    for a in range(0, len(audios)):
+
+        audio = np.array(audios)[a, ]
+
+        for t in range(0, len(texts)):
+
+            text = np.array(texts)[t, ]
+            result = np.concatenate([text, audio], axis=0)
+
+            results.append(result)
 
     return results
 

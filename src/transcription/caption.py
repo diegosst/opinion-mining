@@ -4,6 +4,7 @@ import time
 import pafy
 import selenium
 import pymongo
+from pymongo.cursor import Cursor
 from selenium import webdriver
 from random import randrange
 from pathlib import Path
@@ -16,7 +17,7 @@ def get_captions(code, sentences_limit):
     if database.sentences.find_one({'video_code': code}) is not None:
         print('## SENTENCES ALREADY EXTRACTED, SKIPPING THIS STEP. ##')
         result = database.sentences.find({'video_code': code}).sort('start', pymongo.ASCENDING)
-        generate_excel(result, code)
+        generate_excel(result, code, None, 1)
         return result
 
     driver = webdriver.Chrome()
@@ -61,7 +62,7 @@ def get_captions(code, sentences_limit):
 
     database.sentences.insert(sentences)
 
-    generate_excel(sentences, code)
+    generate_excel(sentences, code, None, 1)
 
     return sentences
 
@@ -147,11 +148,14 @@ def get_random_sentences(sentences, sentences_limit):
     return result
 
 
-def generate_excel(sentences, video_code):
+# Types:
+# 1 - Annotator
+# 2 - Miner
+def generate_excel(sentences, video_code, values, code_type):
     videos_directory = '../data/videos/' + str(video_code)
     current_directory = os.getcwd()
     separator = '/'
-    annotation_file = '-sentiment-annotation.xlsx'
+    annotation_file = '-sentiment-annotation.xlsx' if code_type == 1 else '-sentiments.xlsx'
 
     file = Path(videos_directory + separator + str(video_code) + annotation_file)
 
@@ -169,17 +173,31 @@ def generate_excel(sentences, video_code):
     texts = []
     sentiments = []
 
-    for sentence in sentences:
-        starts.append(sentence['timestampStart'])
-        ends.append(sentence['timestampEnd'])
-        texts.append(sentence['text'])
-        sentiments.append('')
+    size = len(sentences) if code_type == 1 else len(values)
+
+    for i in range(0, size):
+
+        if code_type == 1:
+
+            starts.append(sentences[i]['timestampStart'])
+            ends.append(sentences[i]['timestampEnd'])
+            texts.append(sentences[i]['text'])
+            sentiments.append('')
+
+        else:
+
+            starts.append(values[i]['start'])
+            ends.append(values[i]['end'])
+            texts.append(values[i]['sentence'])
+            sentiments.append(values[i]['sentiment'])
 
     df = pandas.DataFrame({'Sentence': texts,
                            'Start': starts,
                            'End': ends,
                            'Sentiment': sentiments})
 
-    df.to_csv(video_code + '-sentiment-annotation.xlsx', sep='\t', header=True, columns=['Sentence', 'Start',
+    df.to_string
+
+    df.to_csv(video_code + annotation_file, sep='\t', header=True, columns=['Sentence', 'Start',
                                                                                          'End', 'Sentiment'])
     os.chdir(current_directory)

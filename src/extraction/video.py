@@ -70,7 +70,6 @@ def get_video_from_youtube(video_code):
     for file in glob.glob('*' + video_extension):
         file_name = str(file)
 
-
     os.rename(file_name, video_code + video_extension)
 
     os.chdir(current_directory)
